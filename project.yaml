@@ -1,0 +1,24 @@
+id: "02"
+slug: digital-rebound
+name: "Digital Rebound"
+zh_name: "數位反彈效應分析"
+status: concept
+maturity: blueprint
+core_question: "單位資源效率提升後，為何總成本、能耗或運算量沒有下降，甚至上升？"
+building_concept: "Rebound Effect / Jevons Paradox（反彈效應）"
+entities:
+  - OptimizationEvent
+  - ConsumptionSeries
+  - DemandSeries
+  - Baseline
+  - ReboundAssessment
+metrics:
+  - rebound_ratio
+  - unit_cost_delta
+  - total_consumption_delta
+  - demand_elasticity
+  - backfire_probability
+governance:
+  consequential_decision: human-review-required
+  production_data: prohibited-in-blueprint
+  evidence_provenance: required
