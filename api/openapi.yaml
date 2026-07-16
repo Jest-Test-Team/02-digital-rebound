@@ -6,6 +6,17 @@ info:
 servers:
   - url: http://localhost:8081
 paths:
+  /healthz:
+    get:
+      summary: Liveness probe
+      operationId: healthz
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Health'
   /v1/digital-rebound/events:
     post:
       summary: Ingest one evidence event
@@ -19,9 +30,17 @@ paths:
       responses:
         '202':
           description: Accepted for validation and analysis
+        '400':
+          description: Schema or request validation failed
   /v1/digital-rebound/assessments:
     get:
       summary: List explainable assessments
+      parameters:
+        - name: tenant_id
+          in: query
+          required: false
+          schema: { type: string }
+          description: When set, only return assessments for this tenant
       responses:
         '200':
           description: Assessment list
@@ -31,29 +50,155 @@ paths:
                 type: array
                 items:
                   $ref: '#/components/schemas/Assessment'
+  /v1/digital-rebound/assessments/analyze:
+    post:
+      summary: Analyze before/after windows and create a review-required assessment
+      operationId: analyzeDigitalRebound
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnalyzeRequest'
+      responses:
+        '201':
+          description: Assessment created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AnalyzeResponse'
+        '400':
+          description: Invalid analyze request
+  /v1/digital-rebound/assessments/{id}/annotations:
+    post:
+      summary: Append a human-review annotation
+      operationId: annotateDigitalReboundAssessment
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string }
+        - name: tenant_id
+          in: query
+          required: true
+          schema: { type: string }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AnnotationRequest'
+      responses:
+        '200':
+          description: Updated assessment
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Assessment'
+        '404':
+          description: Assessment not found
 components:
   schemas:
+    Health:
+      type: object
+      required: [ok, service, rule_version]
+      properties:
+        ok: { type: boolean }
+        service: { type: string }
+        rule_version: { type: string }
     Event:
       type: object
-      required: [tenant_id, source, observed_at, metric, value, schema_version]
+      required: [tenant_id, project, source, observed_at, metric, value, schema_version]
       properties:
         tenant_id: { type: string }
+        project: { type: string, const: digital-rebound }
         source: { type: string }
         observed_at: { type: string, format: date-time }
-        metric: { type: string, example: rebound_ratio }
+        ingested_at: { type: string, format: date-time }
+        metric:
+          type: string
+          enum: [rebound_ratio, unit_cost_delta, total_consumption_delta, demand_elasticity, backfire_probability]
         value: { type: number }
         unit: { type: string }
-        schema_version: { type: string, example: '0.1.0' }
+        schema_version: { type: string, const: '0.1.0' }
         evidence_ref: { type: string }
+        attributes:
+          type: object
+          additionalProperties:
+            type: [string, number, boolean, 'null']
+    AnalyzeRequest:
+      type: object
+      required:
+        - tenant_id
+        - optimization_id
+        - unit_cost_before
+        - unit_cost_after
+        - total_consumption_before
+        - total_consumption_after
+      properties:
+        tenant_id: { type: string }
+        optimization_id: { type: string }
+        unit_cost_before:
+          type: array
+          items: { type: number }
+          minItems: 1
+        unit_cost_after:
+          type: array
+          items: { type: number }
+          minItems: 1
+        total_consumption_before:
+          type: array
+          items: { type: number }
+          minItems: 1
+        total_consumption_after:
+          type: array
+          items: { type: number }
+          minItems: 1
+        evidence_refs:
+          type: array
+          items: { type: string }
+        observed_at: { type: string, format: date-time }
+    AnalyzeResponse:
+      type: object
+      required: [status, assessment]
+      properties:
+        status: { type: string }
+        assessment:
+          $ref: '#/components/schemas/Assessment'
+    AnnotationRequest:
+      type: object
+      required: [reviewer, decision]
+      properties:
+        reviewer: { type: string }
+        decision:
+          type: string
+          enum: [acknowledged, needs-more-data, rejected, corrected, accepted]
+        note: { type: string }
     Assessment:
       type: object
-      required: [assessment_id, status, evidence_refs, human_review_required]
+      required: [assessment_id, status, evidence_refs, human_review_required, rule_version]
       properties:
         assessment_id: { type: string }
+        tenant_id: { type: string }
+        optimization_id: { type: string }
         status: { type: string, enum: [draft, review-required, accepted, rejected] }
         summary: { type: string }
+        grade: { type: string, enum: [none, partial, backfire, inconclusive] }
         uncertainty: { type: number, minimum: 0, maximum: 1 }
         evidence_refs:
           type: array
           items: { type: string }
         human_review_required: { type: boolean, const: true }
+        rule_version: { type: string, example: rebound-rules@0.1.0 }
+        metrics:
+          type: object
+          additionalProperties: { type: number }
+        assumptions:
+          type: array
+          items: { type: string }
+        missing_data:
+          type: array
+          items: { type: string }
+        stale_evidence: { type: boolean }
+        disclaimer: { type: string }
+        created_at: { type: string, format: date-time }

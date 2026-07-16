@@ -1,1 +1,11 @@
 .DS_Store
+bin/
+data/evidence/
+data/assessments/
+tests/robot/results/
+log.html
+output.xml
+report.html
+*.pyc
+__pycache__/
+.venv/
